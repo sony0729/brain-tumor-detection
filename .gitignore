@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+brain_tumor_dataset/
+.DS_Store
+# model weights are big - uncomment if you don't want to push the .h5
+# backend/model/*.h5

@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brain Tumor Detection</title>
+<style>
+  :root{--bg:#0b1220;--card:#131c31;--line:#243251;--text:#e8edf7;--muted:#8fa0c2;--accent:#5b8cff;--ok:#2fc58a;--bad:#ff5d6c}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:radial-gradient(1200px 600px at 50% -10%,#1a2750,var(--bg));color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;display:flex;justify-content:center;padding:32px 16px}
+  main{width:100%;max-width:560px}
+  h1{font-size:1.7rem;margin:0 0 4px}
+  p.sub{color:var(--muted);margin:0 0 24px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px}
+  #drop{border:2px dashed var(--line);border-radius:12px;min-height:260px;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--muted);cursor:pointer;overflow:hidden;transition:.15s}
+  #drop.over{border-color:var(--accent);background:#17234a}
+  #drop img{max-width:100%;max-height:320px;display:block}
+  button{width:100%;margin-top:16px;padding:14px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-size:1rem;font-weight:600;cursor:pointer}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  #result{margin-top:16px;padding:16px;border-radius:12px;display:none;border:1px solid var(--line)}
+  #result.ok{border-color:var(--ok);background:#0f2a24}
+  #result.bad{border-color:var(--bad);background:#2d1520}
+  #result h2{margin:0 0 6px;font-size:1.3rem}
+  .bar{height:8px;background:#0b1220;border-radius:6px;overflow:hidden;margin-top:8px}
+  .bar i{display:block;height:100%;background:var(--accent)}
+  .row{display:flex;justify-content:space-between;font-size:.85rem;color:var(--muted);margin-top:10px}
+  #err{color:var(--bad);margin-top:12px;display:none;font-size:.9rem}
+  details{margin-top:20px;color:var(--muted);font-size:.85rem}
+  input[type=text]{width:100%;margin-top:8px;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text)}
+  .warn{margin-top:20px;font-size:.78rem;color:var(--muted);text-align:center}
+</style>
+</head>
+<body>
+<main>
+  <h1>🧠 Brain Tumor Detection</h1>
+  <p class="sub">Upload a brain MRI scan. A VGG16 model predicts Tumor / No Tumor.</p>
+
+  <div class="card">
+    <div id="drop"><span id="hint">Click or drop an MRI image here</span></div>
+    <input id="file" type="file" accept="image/*" hidden>
+    <button id="go" disabled>Analyze scan</button>
+    <div id="err"></div>
+    <div id="result">
+      <h2 id="label"></h2>
+      <div>Confidence: <b id="conf"></b></div>
+      <div class="bar"><i id="barfill"></i></div>
+      <div class="row"><span id="p0"></span><span id="p1"></span></div>
+    </div>
+  </div>
+
+  <details>
+    <summary>API settings</summary>
+    <input id="api" type="text" value="http://localhost:8000" aria-label="API URL">
+  </details>
+  <p class="warn">Educational project only — not a medical diagnosis.</p>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let file = null;
+const API_DEFAULT = "http://localhost:8000"; // change to your deployed backend URL before pushing
+$("api").value = API_DEFAULT;
+
+function setFile(f){
+  if(!f || !f.type.startsWith("image/")) return;
+  file = f;
+  const url = URL.createObjectURL(f);
+  $("drop").innerHTML = `<img src="${url}" alt="MRI preview">`;
+  $("go").disabled = false;
+  $("result").style.display = "none";
+  $("err").style.display = "none";
+}
+$("drop").onclick = () => $("file").click();
+$("file").onchange = e => setFile(e.target.files[0]);
+["dragenter","dragover"].forEach(ev => $("drop").addEventListener(ev, e => {e.preventDefault(); $("drop").classList.add("over");}));
+["dragleave","drop"].forEach(ev => $("drop").addEventListener(ev, e => {e.preventDefault(); $("drop").classList.remove("over");}));
+$("drop").addEventListener("drop", e => setFile(e.dataTransfer.files[0]));
+
+$("go").onclick = async () => {
+  $("go").disabled = true; $("go").textContent = "Analyzing…"; $("err").style.display = "none";
+  try{
+    const fd = new FormData(); fd.append("file", file);
+    const r = await fetch($("api").value.replace(/\/$/,"") + "/predict", {method:"POST", body:fd});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.detail || "Request failed");
+    const bad = d.has_tumor;
+    $("result").className = bad ? "bad" : "ok";
+    $("result").style.display = "block";
+    $("label").textContent = bad ? "⚠️ Tumor detected" : "✅ No tumor detected";
+    $("conf").textContent = (d.confidence*100).toFixed(1) + "%";
+    $("barfill").style.width = (d.confidence*100) + "%";
+    $("barfill").style.background = bad ? "var(--bad)" : "var(--ok)";
+    $("p0").textContent = "No Tumor: " + (d.probabilities["No Tumor"]*100).toFixed(1) + "%";
+    $("p1").textContent = "Tumor: " + (d.probabilities["Tumor"]*100).toFixed(1) + "%";
+  }catch(e){
+    $("err").textContent = "Error: " + e.message + " (is the backend running and the API URL correct?)";
+    $("err").style.display = "block";
+  }finally{
+    $("go").disabled = false; $("go").textContent = "Analyze scan";
+  }
+};
+</script>
+</body>
+</html>
